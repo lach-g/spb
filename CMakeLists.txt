@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.15)
 project(spb C)
 
+# === Library ===
 add_library(spb_lib src/spb.c)
+target_include_directories(spb_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # Enable warnings depending on compiler
 if (MSVC)
@@ -15,16 +17,14 @@ set_property(TARGET spb_lib PROPERTY C_STANDARD 99)
 set_property(TARGET spb_lib PROPERTY C_STANDARD_REQUIRED ON)
 set_property(TARGET spb_lib PROPERTY C_EXTENSIONS OFF)
 
+# Dependencies
 find_package(eclipse-paho-mqtt-c REQUIRED)
 
-add_executable(simple_publisher src/simple_publisher.c
-        src/spb.h
-        src/spb.c)
+# === Examples ===
+add_executable(simple_publisher examples/simple_publisher.c)
+target_link_libraries(simple_publisher spb_lib)
 
-add_executable(simple_subscriber src/simple_subscriber.c
-        src/spb.h
-        src/spb.c)
+add_executable(simple_subscriber examples/simple_subscriber.c)
+target_link_libraries(simple_subscriber spb_lib)
 
-# target_link_libraries(${PROJECT_NAME} eclipse-paho-mqtt-c::paho-mqtt3as-static)
-target_link_libraries(simple_publisher eclipse-paho-mqtt-c::paho-mqtt3as-static)
-target_link_libraries(simple_subscriber eclipse-paho-mqtt-c::paho-mqtt3as-static)
+target_link_libraries(spb_lib eclipse-paho-mqtt-c::paho-mqtt3as-static)

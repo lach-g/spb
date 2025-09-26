@@ -1,5 +1,5 @@
 // TODO: Change this to <...>
-#include "spb.h"
+#include "../src/spb.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

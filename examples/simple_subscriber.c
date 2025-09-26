@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "spb.h"
+#include "../src/spb.h"
 
 #if !defined(_WIN32)
 #include <unistd.h>
