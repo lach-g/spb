@@ -20,7 +20,7 @@ wrapper. The findings below come from auditing `src/spb.c`, `src/spb.h`,
 
 ### 1a. Correctness & safety
 
-- [ ] **[Critical]** Zero-initialise the client in `spb_init` (`src/spb.c:30`).
+- [x] **[Critical]** Zero-initialise the client in `spb_init` (`src/spb.c:30`).
       Only the three Paho option structs are initialised; `client_callbacks`,
       `connect_options`, `response_options`, and `disconnect_options` are left
       as uninitialised heap memory. Use `calloc`/`memset`.

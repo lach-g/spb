@@ -29,7 +29,7 @@ struct spb_client {
 
 spb_client_t* spb_init(void)
 {
-    spb_client_t* client = malloc(sizeof(spb_client_t));
+    spb_client_t* client = calloc(1, sizeof(spb_client_t));
     if (client != NULL) {
         MQTTAsync_connectOptions conn_opts = MQTTAsync_connectOptions_initializer;
         client->paho_lib.connect_options = conn_opts;
