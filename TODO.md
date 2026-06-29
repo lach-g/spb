@@ -24,7 +24,7 @@ wrapper. The findings below come from auditing `src/spb.c`, `src/spb.h`,
       Only the three Paho option structs are initialised; `client_callbacks`,
       `connect_options`, `response_options`, and `disconnect_options` are left
       as uninitialised heap memory. Use `calloc`/`memset`.
-- [ ] **[Critical]** NULL-check `response` before dereferencing in every
+- [x] **[Critical]** NULL-check `response` before dereferencing in every
       success/failure wrapper callback (`src/spb.c:255`, `:271`, `:287`,
       `:301`, `:319`, `:333`). Paho can pass `NULL` here — the example code
       already guards with `response ? ... : 0` (`examples/simple_publisher.c:77`),
