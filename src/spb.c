@@ -29,7 +29,7 @@ struct spb_client {
 
 spb_client_t* spb_init(void)
 {
-    spb_client_t* client = malloc(sizeof(spb_client_t));
+    spb_client_t* client = calloc(1, sizeof(spb_client_t));
     if (client != NULL) {
         MQTTAsync_connectOptions conn_opts = MQTTAsync_connectOptions_initializer;
         client->paho_lib.connect_options = conn_opts;
@@ -252,7 +252,7 @@ static void connect_onsuccess_wrapper_cb(void* context, MQTTAsync_successData* r
     printf("spb layer: connect on success callback\n");
     if (context != NULL) {
         spb_client_t* client = (spb_client_t*)context;
-        spb_successdata_t success_data = { .token = response->token };
+        spb_successdata_t success_data = { .token = response ? response->token : 0 };
 
         if (client->connect_options.onsuccess_cb != NULL) {
             client->connect_options.onsuccess_cb(client->connect_options.context, &success_data);
@@ -267,9 +267,9 @@ static void connect_onfailure_wrapper_cb(void* context,  MQTTAsync_failureData* 
     if (context != NULL) {
         spb_client_t* client = (spb_client_t*)context;
         spb_failuredata_t failure_data = {
-            .token = response->token,
-            .code = response->code,
-            .message = response->message,
+            .token = response ? response->token : 0,
+            .code = response ? response->code : 0,
+            .message = response ? response->message : NULL,
         };
 
         if (client->connect_options.onfailure_cb != NULL) {
@@ -284,7 +284,7 @@ static void disconnect_onsuccess_wrapper_cb(void* context, MQTTAsync_successData
 
     if (context != NULL) {
         spb_client_t* client = (spb_client_t*)context;
-        spb_successdata_t success_data = { .token = response->token };
+        spb_successdata_t success_data = { .token = response ? response->token : 0 };
 
         if (client->disconnect_options.onsuccess_cb != NULL) {
             client->disconnect_options.onsuccess_cb(client->disconnect_options.context, &success_data);
@@ -299,9 +299,9 @@ static void disconnect_onfailure_wrapper_cb(void* context,  MQTTAsync_failureDat
     if (context != NULL) {
         spb_client_t* client = (spb_client_t*)context;
         spb_failuredata_t failure_data = {
-            .token = response->token,
-            .code = response->code,
-            .message = response->message,
+            .token = response ? response->token : 0,
+            .code = response ? response->code : 0,
+            .message = response ? response->message : NULL,
         };
 
         if (client->disconnect_options.onfailure_cb != NULL) {
@@ -316,7 +316,7 @@ static void response_onsuccess_wrapper_cb(void* context, MQTTAsync_successData* 
 
     if (context != NULL) {
         spb_client_t* client = (spb_client_t*)context;
-        spb_successdata_t success_data = { .token = response->token };
+        spb_successdata_t success_data = { .token = response ? response->token : 0 };
 
         if (client->response_options.onsuccess_cb != NULL) {
             client->response_options.onsuccess_cb(client->response_options.context, &success_data);
@@ -331,9 +331,9 @@ static void response_onfailure_wrapper_cb(void* context,  MQTTAsync_failureData*
     if (context != NULL) {
         spb_client_t* client = (spb_client_t*)context;
         spb_failuredata_t failure_data = {
-            .token = response->token,
-            .code = response->code,
-            .message = response->message,
+            .token = response ? response->token : 0,
+            .code = response ? response->code : 0,
+            .message = response ? response->message : NULL,
         };
 
         if (client->response_options.onfailure_cb != NULL) {
