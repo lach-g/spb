@@ -14,7 +14,6 @@ typedef struct paho_client_cb {
 typedef struct paho_lib {
     MQTTAsync client;
     MQTTAsync_connectOptions connect_options;
-    MQTTAsync_responseOptions response_options;
     MQTTAsync_disconnectOptions disconnect_options;
     paho_client_cb_t client_cb;
 } paho_lib_t;
@@ -23,9 +22,17 @@ struct spb_client {
     paho_lib_t paho_lib;
     spb_client_cb_t client_callbacks;
     spb_connect_options_t connect_options;
-    spb_response_options_t response_options;
     spb_disconnect_options_t disconnect_options;
 };
+
+/* Per-call response state. Publish (spb_sendmessage) and subscribe
+ * (spb_subscribe) each allocate one of these and hand it to Paho as the
+ * response context, so concurrent/interleaved operations no longer share a
+ * single slot and cannot clobber each other's callbacks. The matching wrapper
+ * callback frees it after dispatching to the user callback. */
+typedef struct spb_response_ctx {
+    spb_response_options_t options;
+} spb_response_ctx_t;
 
 spb_client_t* spb_init(void)
 {
@@ -36,9 +43,6 @@ spb_client_t* spb_init(void)
 
         MQTTAsync_disconnectOptions disc_opts = MQTTAsync_disconnectOptions_initializer;
         client->paho_lib.disconnect_options = disc_opts;
-
-        MQTTAsync_responseOptions resp_opts = MQTTAsync_responseOptions_initializer;
-        client->paho_lib.response_options = resp_opts;
     }
 
     return client;
@@ -128,10 +132,16 @@ int spb_sendmessage(spb_client_t* client, const char* topic, const spb_message_t
         return -1;
     }
 
-    client->response_options = response_options;
-    client->paho_lib.response_options.onSuccess = response_onsuccess_wrapper_cb;
-    client->paho_lib.response_options.onFailure = response_onfailure_wrapper_cb;
-    client->paho_lib.response_options.context = client;
+    spb_response_ctx_t* ctx = calloc(1, sizeof(spb_response_ctx_t));
+    if (ctx == NULL) {
+        return -1;
+    }
+    ctx->options = response_options;
+
+    MQTTAsync_responseOptions paho_resp_opts = MQTTAsync_responseOptions_initializer;
+    paho_resp_opts.onSuccess = response_onsuccess_wrapper_cb;
+    paho_resp_opts.onFailure = response_onfailure_wrapper_cb;
+    paho_resp_opts.context = ctx;
 
     MQTTAsync_message paho_msg = MQTTAsync_message_initializer;
     paho_msg.payload = message->payload;
@@ -139,7 +149,8 @@ int spb_sendmessage(spb_client_t* client, const char* topic, const spb_message_t
     paho_msg.qos = message->qos;
     paho_msg.retained = message->retained;
 
-	if (MQTTAsync_sendMessage(client->paho_lib.client, topic, &paho_msg, &client->paho_lib.response_options) != MQTTASYNC_SUCCESS) {
+	if (MQTTAsync_sendMessage(client->paho_lib.client, topic, &paho_msg, &paho_resp_opts) != MQTTASYNC_SUCCESS) {
+	    free(ctx);
 	    return -1;
 	}
 
@@ -153,13 +164,19 @@ int spb_subscribe(spb_client_t* client, const char* topic, int qos, spb_response
         return -1;
     }
 
-    // TODO: is using the same response options overwriting the spb_sendmessage() version if it also publishes?
-    client->response_options = response_options;
-    client->paho_lib.response_options.onSuccess = response_onsuccess_wrapper_cb;
-    client->paho_lib.response_options.onFailure = response_onfailure_wrapper_cb;
-    client->paho_lib.response_options.context = client;
+    spb_response_ctx_t* ctx = calloc(1, sizeof(spb_response_ctx_t));
+    if (ctx == NULL) {
+        return -1;
+    }
+    ctx->options = response_options;
 
-    if (MQTTAsync_subscribe(client->paho_lib.client, topic, qos, &client->paho_lib.response_options) != MQTTASYNC_SUCCESS) {
+    MQTTAsync_responseOptions paho_resp_opts = MQTTAsync_responseOptions_initializer;
+    paho_resp_opts.onSuccess = response_onsuccess_wrapper_cb;
+    paho_resp_opts.onFailure = response_onfailure_wrapper_cb;
+    paho_resp_opts.context = ctx;
+
+    if (MQTTAsync_subscribe(client->paho_lib.client, topic, qos, &paho_resp_opts) != MQTTASYNC_SUCCESS) {
+        free(ctx);
         return -1;
     }
 
@@ -315,12 +332,14 @@ static void response_onsuccess_wrapper_cb(void* context, MQTTAsync_successData* 
     printf("spb layer: response on success callback\n");
 
     if (context != NULL) {
-        spb_client_t* client = (spb_client_t*)context;
+        spb_response_ctx_t* ctx = (spb_response_ctx_t*)context;
         spb_successdata_t success_data = { .token = response ? response->token : 0 };
 
-        if (client->response_options.onsuccess_cb != NULL) {
-            client->response_options.onsuccess_cb(client->response_options.context, &success_data);
+        if (ctx->options.onsuccess_cb != NULL) {
+            ctx->options.onsuccess_cb(ctx->options.context, &success_data);
         }
+
+        free(ctx);
     }
 }
 
@@ -329,15 +348,17 @@ static void response_onfailure_wrapper_cb(void* context,  MQTTAsync_failureData*
     printf("spb layer: response on failure callback\n");
 
     if (context != NULL) {
-        spb_client_t* client = (spb_client_t*)context;
+        spb_response_ctx_t* ctx = (spb_response_ctx_t*)context;
         spb_failuredata_t failure_data = {
             .token = response ? response->token : 0,
             .code = response ? response->code : 0,
             .message = response ? response->message : NULL,
         };
 
-        if (client->response_options.onfailure_cb != NULL) {
-            client->response_options.onfailure_cb(client->response_options.context, &failure_data);
+        if (ctx->options.onfailure_cb != NULL) {
+            ctx->options.onfailure_cb(ctx->options.context, &failure_data);
         }
+
+        free(ctx);
     }
 }
