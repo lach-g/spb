@@ -29,10 +29,13 @@ wrapper. The findings below come from auditing `src/spb.c`, `src/spb.h`,
       `:301`, `:319`, `:333`). Paho can pass `NULL` here — the example code
       already guards with `response ? ... : 0` (`examples/simple_publisher.c:77`),
       so the library is the inconsistent party and risks a crash.
-- [ ] **[High]** Give publish and subscribe independent response-option state.
+- [x] **[High]** Give publish and subscribe independent response-option state.
       `spb_subscribe` and `spb_sendmessage` both overwrite
       `client->response_options` (`src/spb.c:156`), so concurrent/interleaved
-      use can clobber each other's callbacks.
+      use can clobber each other's callbacks. Fixed via per-call heap-allocated
+      response context (`spb_response_ctx_t`) handed to Paho as the response
+      context and freed in the response wrapper callbacks; the shared
+      `client->response_options` slot was removed.
 - [ ] **[High]** Add a lifecycle/state guard so `spb_connect` /
       `spb_sendmessage` / `spb_subscribe` called before `spb_create` cannot
       operate on an uninitialised Paho handle (currently UB).
