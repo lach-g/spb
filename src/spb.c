@@ -81,6 +81,7 @@ int spb_setcallbacks(
     spb_deliverycomplete* delivery_complete_cb)
 {
     if (client == NULL ||
+        client->paho_lib.client == NULL ||
         messagearrived_cb == NULL) {
         return -1;
     }
@@ -104,7 +105,8 @@ int spb_setcallbacks(
 
 int spb_connect(spb_client_t* client, const spb_connect_options_t connect_options)
 {
-    if (client == NULL) {
+    if (client == NULL ||
+        client->paho_lib.client == NULL) {
         return -1;
     }
 
@@ -126,6 +128,7 @@ int spb_connect(spb_client_t* client, const spb_connect_options_t connect_option
 int spb_sendmessage(spb_client_t* client, const char* topic, const spb_message_t* message, spb_response_options_t response_options)
 {
     if (client == NULL ||
+        client->paho_lib.client == NULL ||
         topic == NULL ||
         message == NULL ||
         message->payload == NULL) {
@@ -160,6 +163,7 @@ int spb_sendmessage(spb_client_t* client, const char* topic, const spb_message_t
 int spb_subscribe(spb_client_t* client, const char* topic, int qos, spb_response_options_t response_options)
 {
     if (client == NULL ||
+        client->paho_lib.client == NULL ||
         topic == NULL) {
         return -1;
     }
@@ -185,7 +189,8 @@ int spb_subscribe(spb_client_t* client, const char* topic, int qos, spb_response
 
 int spb_disconnect(spb_client_t* client, spb_disconnect_options_t disconnect_options)
 {
-    if (client == NULL) {
+    if (client == NULL ||
+        client->paho_lib.client == NULL) {
         return -1;
     }
 
