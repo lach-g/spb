@@ -36,9 +36,13 @@ wrapper. The findings below come from auditing `src/spb.c`, `src/spb.h`,
       response context (`spb_response_ctx_t`) handed to Paho as the response
       context and freed in the response wrapper callbacks; the shared
       `client->response_options` slot was removed.
-- [ ] **[High]** Add a lifecycle/state guard so `spb_connect` /
+- [x] **[High]** Add a lifecycle/state guard so `spb_connect` /
       `spb_sendmessage` / `spb_subscribe` called before `spb_create` cannot
-      operate on an uninitialised Paho handle (currently UB).
+      operate on an uninitialised Paho handle (currently UB). Fixed by
+      NULL-checking `client->paho_lib.client` in all five Paho-touching public
+      functions (`spb_setcallbacks`, `spb_connect`, `spb_sendmessage`,
+      `spb_subscribe`, `spb_disconnect`); `calloc` in `spb_init` zeroes the
+      handle and `MQTTAsync_destroy` nulls it, so the check is always sound.
 - [ ] **[Medium]** Add an explicit `#include <stdio.h>` to `src/spb.c` (`printf`
       is used but the header is only pulled in transitively via `MQTTAsync.h`).
       Audit other implicit/transitive includes while here.
