@@ -43,9 +43,10 @@ wrapper. The findings below come from auditing `src/spb.c`, `src/spb.h`,
       functions (`spb_setcallbacks`, `spb_connect`, `spb_sendmessage`,
       `spb_subscribe`, `spb_disconnect`); `calloc` in `spb_init` zeroes the
       handle and `MQTTAsync_destroy` nulls it, so the check is always sound.
-- [ ] **[Medium]** Add an explicit `#include <stdio.h>` to `src/spb.c` (`printf`
+- [x] **[Medium]** Add an explicit `#include <stdio.h>` to `src/spb.c` (`printf`
       is used but the header is only pulled in transitively via `MQTTAsync.h`).
-      Audit other implicit/transitive includes while here.
+      Audit other implicit/transitive includes while here. Only `stdio.h` was
+      missing; `stdlib.h` was already a direct include covering `calloc`/`free`.
 
 ### 1b. API & design
 
