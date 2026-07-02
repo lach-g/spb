@@ -69,18 +69,26 @@ the application callback with the application's `context`.
 
 ## API reference
 
-All functions return `0` on success and `-1` on failure unless noted.
+All functions except `spb_init`/`spb_destroy` return an `spb_error_t` code:
+`SPB_SUCCESS` (`0`) on success. Failures originating in the spb layer itself
+(NULL/invalid arguments, allocation failure) return dedicated codes
+(`SPB_ERR_INVALID_ARGUMENT = -100`, `SPB_ERR_NOMEM = -101`). Failures from the
+underlying Paho MQTT client are propagated verbatim: the `SPB_*` codes in the
+`-1..-19` range mirror Paho's `MQTTASYNC_*` codes one-to-one (asserted at
+compile time), so no Paho header ever leaks into application code. Use
+`spb_strerror(code)` for a human-readable description of any code.
 
 | Function | Purpose |
 | --- | --- |
 | `spb_client_t* spb_init(void)` | Allocate a client and initialise Paho option structs. Returns `NULL` on allocation failure. |
-| `int spb_create(client, uri, client_id)` | Create the underlying Paho client for the given broker `uri` and `client_id`. |
-| `int spb_setcallbacks(client, context, connection_lost, message_arrived, delivery_complete)` | Register connection-lost, message-arrived, and delivery-complete callbacks. `message_arrived` is required. |
-| `int spb_connect(client, connect_options)` | Begin an async connect. Success/failure reported via the options' callbacks. |
-| `int spb_sendmessage(client, topic, message, response_options)` | Publish `message` to `topic`. |
-| `int spb_subscribe(client, topic, qos, response_options)` | Subscribe to `topic` at `qos`. |
-| `int spb_disconnect(client, disconnect_options)` | Begin an async disconnect. |
+| `spb_error_t spb_create(client, uri, client_id)` | Create the underlying Paho client for the given broker `uri` and `client_id`. |
+| `spb_error_t spb_setcallbacks(client, context, connection_lost, message_arrived, delivery_complete)` | Register connection-lost, message-arrived, and delivery-complete callbacks. `message_arrived` is required. |
+| `spb_error_t spb_connect(client, connect_options)` | Begin an async connect. Success/failure reported via the options' callbacks. |
+| `spb_error_t spb_sendmessage(client, topic, message, response_options, out_token)` | Publish `message` to `topic`. If `out_token` is non-`NULL`, the delivery token is written to it on success. |
+| `spb_error_t spb_subscribe(client, topic, qos, response_options, out_token)` | Subscribe to `topic` at `qos`. If `out_token` is non-`NULL`, the delivery token is written to it on success. |
+| `spb_error_t spb_disconnect(client, disconnect_options)` | Begin an async disconnect. |
 | `void spb_destroy(client)` | Destroy the Paho client and free the handle. |
+| `const char* spb_strerror(code)` | Return a static, human-readable string for an `spb_error_t` code. Never returns `NULL`. |
 
 ### Option and callback types
 
@@ -110,7 +118,7 @@ void on_connect(void* context, spb_successdata_t* response) {
     spb_response_options_t opts = { .onsuccess_cb = on_send, .context = client };
     spb_message_t msg = { .payload = "Hello there",
                           .payloadlen = 11, .qos = 1, .retained = 0 };
-    spb_sendmessage(client, "spb", &msg, opts);
+    spb_sendmessage(client, "spb", &msg, opts, NULL);
 }
 
 int main(void) {
