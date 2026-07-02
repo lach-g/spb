@@ -3,6 +3,7 @@
 #include <MQTTAsync.h>
 
  /* TODO: Make generic? */
+#include <stdio.h>
 #include <stdlib.h>
 
 typedef struct paho_client_cb {
