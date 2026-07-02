@@ -43,8 +43,8 @@ void connlost(void *context, char *cause)
 
 	printf("Reconnecting\n");
 	int rc;
-	if ((rc = spb_connect(client, connect_options)) != 0) {
-		printf("Failed to start connect, return code %d\n", rc);
+	if ((rc = spb_connect(client, connect_options)) != SPB_SUCCESS) {
+		printf("Failed to start connect, return code %d (%s)\n", rc, spb_strerror(rc));
 		finished = 1;
 	}
 }
@@ -104,8 +104,8 @@ void onConnect(void* context, spb_successdata_t* response)
 	printf("Subscribing to topic %s\nfor client %s using QoS%d\n\n"
            "Press Q<Enter> to quit\n\n", TOPIC, CLIENTID, QOS);
 	int rc;
-	if ((rc = spb_subscribe(client, TOPIC, QOS, response_options)) != 0) {
-		printf("Failed to start subscribe, return code %d\n", rc);
+	if ((rc = spb_subscribe(client, TOPIC, QOS, response_options, NULL)) != SPB_SUCCESS) {
+		printf("Failed to start subscribe, return code %d (%s)\n", rc, spb_strerror(rc));
 		finished = 1;
 	}
 }
@@ -121,14 +121,14 @@ int main(int argc, char* argv[])
 	printf("Using server at %s\n", uri);
 
 	if ((rc = spb_create(client, uri, CLIENTID))
-			!= 0) {
-		printf("Failed to create client, return code %d\n", rc);
+			!= SPB_SUCCESS) {
+		printf("Failed to create client, return code %d (%s)\n", rc, spb_strerror(rc));
 		rc = EXIT_FAILURE;
 		goto exit;
 	}
 
-	if ((rc = spb_setcallbacks(client, client, connlost, msgarrvd, NULL)) != 0) {
-		printf("Failed to set callbacks, return code %d\n", rc);
+	if ((rc = spb_setcallbacks(client, client, connlost, msgarrvd, NULL)) != SPB_SUCCESS) {
+		printf("Failed to set callbacks, return code %d (%s)\n", rc, spb_strerror(rc));
 		rc = EXIT_FAILURE;
 		goto destroy_exit;
 	}
@@ -141,8 +141,8 @@ int main(int argc, char* argv[])
 		.context = client
 	};
 
-	if ((rc = spb_connect(client, connect_options)) != 0) {
-		printf("Failed to start connect, return code %d\n", rc);
+	if ((rc = spb_connect(client, connect_options)) != SPB_SUCCESS) {
+		printf("Failed to start connect, return code %d (%s)\n", rc, spb_strerror(rc));
 		rc = EXIT_FAILURE;
 		goto destroy_exit;
 	}
@@ -166,8 +166,8 @@ int main(int argc, char* argv[])
 		.onfailure_cb = onDisconnectFailure,
 	};
 
-	if ((rc = spb_disconnect(client, disconnect_options)) != 0) {
-		printf("Failed to start disconnect, return code %d\n", rc);
+	if ((rc = spb_disconnect(client, disconnect_options)) != SPB_SUCCESS) {
+		printf("Failed to start disconnect, return code %d (%s)\n", rc, spb_strerror(rc));
 		rc = EXIT_FAILURE;
 		goto destroy_exit;
 	}

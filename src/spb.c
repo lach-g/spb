@@ -6,6 +6,36 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/* Keep the public spb_error_t mirror in lockstep with Paho's codes. If Paho
+ * ever renumbers, these fail the build instead of silently mistranslating.
+ * A negative-array-size typedef is used rather than C11 _Static_assert because
+ * the library is built as strict C99 (see CMakeLists.txt). */
+#define SPB_CONCAT_(a, b) a##b
+#define SPB_CONCAT(a, b) SPB_CONCAT_(a, b)
+#define SPB_STATIC_ASSERT(cond) \
+    typedef char SPB_CONCAT(spb_static_assert_, __LINE__)[(cond) ? 1 : -1]
+
+SPB_STATIC_ASSERT(SPB_SUCCESS               == MQTTASYNC_SUCCESS);
+SPB_STATIC_ASSERT(SPB_FAILURE               == MQTTASYNC_FAILURE);
+SPB_STATIC_ASSERT(SPB_PERSISTENCE_ERROR     == MQTTASYNC_PERSISTENCE_ERROR);
+SPB_STATIC_ASSERT(SPB_DISCONNECTED          == MQTTASYNC_DISCONNECTED);
+SPB_STATIC_ASSERT(SPB_MAX_MESSAGES_INFLIGHT == MQTTASYNC_MAX_MESSAGES_INFLIGHT);
+SPB_STATIC_ASSERT(SPB_BAD_UTF8_STRING       == MQTTASYNC_BAD_UTF8_STRING);
+SPB_STATIC_ASSERT(SPB_NULL_PARAMETER        == MQTTASYNC_NULL_PARAMETER);
+SPB_STATIC_ASSERT(SPB_TOPICNAME_TRUNCATED   == MQTTASYNC_TOPICNAME_TRUNCATED);
+SPB_STATIC_ASSERT(SPB_BAD_STRUCTURE         == MQTTASYNC_BAD_STRUCTURE);
+SPB_STATIC_ASSERT(SPB_BAD_QOS               == MQTTASYNC_BAD_QOS);
+SPB_STATIC_ASSERT(SPB_NO_MORE_MSGIDS        == MQTTASYNC_NO_MORE_MSGIDS);
+SPB_STATIC_ASSERT(SPB_OPERATION_INCOMPLETE  == MQTTASYNC_OPERATION_INCOMPLETE);
+SPB_STATIC_ASSERT(SPB_MAX_BUFFERED_MESSAGES == MQTTASYNC_MAX_BUFFERED_MESSAGES);
+SPB_STATIC_ASSERT(SPB_SSL_NOT_SUPPORTED     == MQTTASYNC_SSL_NOT_SUPPORTED);
+SPB_STATIC_ASSERT(SPB_BAD_PROTOCOL          == MQTTASYNC_BAD_PROTOCOL);
+SPB_STATIC_ASSERT(SPB_BAD_MQTT_OPTION       == MQTTASYNC_BAD_MQTT_OPTION);
+SPB_STATIC_ASSERT(SPB_WRONG_MQTT_VERSION    == MQTTASYNC_WRONG_MQTT_VERSION);
+SPB_STATIC_ASSERT(SPB_0_LEN_WILL_TOPIC      == MQTTASYNC_0_LEN_WILL_TOPIC);
+SPB_STATIC_ASSERT(SPB_COMMAND_IGNORED       == MQTTASYNC_COMMAND_IGNORED);
+SPB_STATIC_ASSERT(SPB_MAX_BUFFERED          == MQTTASYNC_MAX_BUFFERED);
+
 typedef struct paho_client_cb {
     MQTTAsync_connectionLost* connection_lost_cb;
     MQTTAsync_messageArrived* messagearrived_cb;
@@ -49,19 +79,20 @@ spb_client_t* spb_init(void)
     return client;
 }
 
-int spb_create(spb_client_t* client, const char* uri, const char* client_id)
+spb_error_t spb_create(spb_client_t* client, const char* uri, const char* client_id)
 {
     if (client == NULL ||
         uri == NULL ||
         client_id == NULL) {
-        return -1;
+        return SPB_ERR_INVALID_ARGUMENT;
     }
 
-    if (MQTTAsync_create(&client->paho_lib.client, uri, client_id, MQTTCLIENT_PERSISTENCE_NONE, NULL) != MQTTASYNC_SUCCESS) {
-        return -1;
+    int rc = MQTTAsync_create(&client->paho_lib.client, uri, client_id, MQTTCLIENT_PERSISTENCE_NONE, NULL);
+    if (rc != MQTTASYNC_SUCCESS) {
+        return (spb_error_t)rc;
     }
 
-    return 0;
+    return SPB_SUCCESS;
 }
 
 static void connectionlost_wrapper_cb(void* context, char* cause);
@@ -74,7 +105,7 @@ static void disconnect_onfailure_wrapper_cb(void* context,  MQTTAsync_failureDat
 static void response_onsuccess_wrapper_cb(void* context, MQTTAsync_successData* response);
 static void response_onfailure_wrapper_cb(void* context,  MQTTAsync_failureData* response);
 
-int spb_setcallbacks(
+spb_error_t spb_setcallbacks(
     spb_client_t* client,
     void* context,
     spb_connectionlost* connection_lost_cb,
@@ -84,7 +115,7 @@ int spb_setcallbacks(
     if (client == NULL ||
         client->paho_lib.client == NULL ||
         messagearrived_cb == NULL) {
-        return -1;
+        return SPB_ERR_INVALID_ARGUMENT;
     }
 
     client->client_callbacks.connection_lost_cb = connection_lost_cb;
@@ -92,23 +123,24 @@ int spb_setcallbacks(
     client->client_callbacks.delivery_complete_cb = delivery_complete_cb;
     client->client_callbacks.context = context;
 
-	if (MQTTAsync_setCallbacks(
+	int rc = MQTTAsync_setCallbacks(
 	    client->paho_lib.client,
 	    client,
 	    connectionlost_wrapper_cb,
 	    messagearrived_wrapper_cb,
-	    deliverycomplete_wrapper_cb) != MQTTASYNC_SUCCESS) {
-	    return -1;
+	    deliverycomplete_wrapper_cb);
+	if (rc != MQTTASYNC_SUCCESS) {
+	    return (spb_error_t)rc;
 	}
 
-    return 0;
+    return SPB_SUCCESS;
 }
 
-int spb_connect(spb_client_t* client, const spb_connect_options_t connect_options)
+spb_error_t spb_connect(spb_client_t* client, spb_connect_options_t connect_options)
 {
     if (client == NULL ||
         client->paho_lib.client == NULL) {
-        return -1;
+        return SPB_ERR_INVALID_ARGUMENT;
     }
 
     client->connect_options = connect_options;
@@ -119,26 +151,27 @@ int spb_connect(spb_client_t* client, const spb_connect_options_t connect_option
     client->paho_lib.connect_options.onFailure = connect_onfailure_wrapper_cb;
     client->paho_lib.connect_options.context = client;
 
-    if (MQTTAsync_connect(client->paho_lib.client, &client->paho_lib.connect_options) != MQTTASYNC_SUCCESS) {
-        return -1;
+    int rc = MQTTAsync_connect(client->paho_lib.client, &client->paho_lib.connect_options);
+    if (rc != MQTTASYNC_SUCCESS) {
+        return (spb_error_t)rc;
     }
 
-    return 0;
+    return SPB_SUCCESS;
 }
 
-int spb_sendmessage(spb_client_t* client, const char* topic, const spb_message_t* message, spb_response_options_t response_options)
+spb_error_t spb_sendmessage(spb_client_t* client, const char* topic, const spb_message_t* message, spb_response_options_t response_options, int* out_token)
 {
     if (client == NULL ||
         client->paho_lib.client == NULL ||
         topic == NULL ||
         message == NULL ||
         message->payload == NULL) {
-        return -1;
+        return SPB_ERR_INVALID_ARGUMENT;
     }
 
     spb_response_ctx_t* ctx = calloc(1, sizeof(spb_response_ctx_t));
     if (ctx == NULL) {
-        return -1;
+        return SPB_ERR_NOMEM;
     }
     ctx->options = response_options;
 
@@ -153,25 +186,30 @@ int spb_sendmessage(spb_client_t* client, const char* topic, const spb_message_t
     paho_msg.qos = message->qos;
     paho_msg.retained = message->retained;
 
-	if (MQTTAsync_sendMessage(client->paho_lib.client, topic, &paho_msg, &paho_resp_opts) != MQTTASYNC_SUCCESS) {
+	int rc = MQTTAsync_sendMessage(client->paho_lib.client, topic, &paho_msg, &paho_resp_opts);
+	if (rc != MQTTASYNC_SUCCESS) {
 	    free(ctx);
-	    return -1;
+	    return (spb_error_t)rc;
 	}
 
-    return 0;
+    if (out_token != NULL) {
+        *out_token = paho_resp_opts.token;
+    }
+
+    return SPB_SUCCESS;
 }
 
-int spb_subscribe(spb_client_t* client, const char* topic, int qos, spb_response_options_t response_options)
+spb_error_t spb_subscribe(spb_client_t* client, const char* topic, int qos, spb_response_options_t response_options, int* out_token)
 {
     if (client == NULL ||
         client->paho_lib.client == NULL ||
         topic == NULL) {
-        return -1;
+        return SPB_ERR_INVALID_ARGUMENT;
     }
 
     spb_response_ctx_t* ctx = calloc(1, sizeof(spb_response_ctx_t));
     if (ctx == NULL) {
-        return -1;
+        return SPB_ERR_NOMEM;
     }
     ctx->options = response_options;
 
@@ -180,19 +218,24 @@ int spb_subscribe(spb_client_t* client, const char* topic, int qos, spb_response
     paho_resp_opts.onFailure = response_onfailure_wrapper_cb;
     paho_resp_opts.context = ctx;
 
-    if (MQTTAsync_subscribe(client->paho_lib.client, topic, qos, &paho_resp_opts) != MQTTASYNC_SUCCESS) {
+    int rc = MQTTAsync_subscribe(client->paho_lib.client, topic, qos, &paho_resp_opts);
+    if (rc != MQTTASYNC_SUCCESS) {
         free(ctx);
-        return -1;
+        return (spb_error_t)rc;
     }
 
-    return 0;
+    if (out_token != NULL) {
+        *out_token = paho_resp_opts.token;
+    }
+
+    return SPB_SUCCESS;
 }
 
-int spb_disconnect(spb_client_t* client, spb_disconnect_options_t disconnect_options)
+spb_error_t spb_disconnect(spb_client_t* client, spb_disconnect_options_t disconnect_options)
 {
     if (client == NULL ||
         client->paho_lib.client == NULL) {
-        return -1;
+        return SPB_ERR_INVALID_ARGUMENT;
     }
 
     client->disconnect_options = disconnect_options;
@@ -200,11 +243,12 @@ int spb_disconnect(spb_client_t* client, spb_disconnect_options_t disconnect_opt
     client->paho_lib.disconnect_options.onFailure = disconnect_onfailure_wrapper_cb;
     client->paho_lib.disconnect_options.context = client;
 
-    if (MQTTAsync_disconnect(client->paho_lib.client, &client->paho_lib.disconnect_options) != MQTTASYNC_SUCCESS) {
-        return -1;
+    int rc = MQTTAsync_disconnect(client->paho_lib.client, &client->paho_lib.disconnect_options);
+    if (rc != MQTTASYNC_SUCCESS) {
+        return (spb_error_t)rc;
     }
 
-    return 0;
+    return SPB_SUCCESS;
 }
 
 void spb_destroy(spb_client_t* client)
@@ -213,6 +257,49 @@ void spb_destroy(spb_client_t* client)
         MQTTAsync_destroy(&client->paho_lib.client);
         free(client);
     }
+}
+
+const char* spb_strerror(spb_error_t code)
+{
+    /* NOTE: this switch deliberately has no `default:` label and lists every
+     * spb_error_t enumerator. Under -Wall (-Wswitch) + -Werror that makes it a
+     * build error to add a new code without handling it here, which prevents an
+     * spb-layer code from silently falling through to MQTTAsync_strerror and
+     * leaking a Paho error string for a code Paho never issued. spb-layer codes
+     * must return their own string; only the Paho-mirrored range defers to
+     * Paho. */
+    switch (code) {
+    /* spb-layer codes — handled here so they never reach Paho */
+    case SPB_SUCCESS:               return "success";
+    case SPB_ERR_INVALID_ARGUMENT:  return "invalid argument";
+    case SPB_ERR_NOMEM:             return "out of memory";
+
+    /* Paho-mirrored codes (-1..-19) — defer to Paho's own strings */
+    case SPB_FAILURE:
+    case SPB_PERSISTENCE_ERROR:
+    case SPB_DISCONNECTED:
+    case SPB_MAX_MESSAGES_INFLIGHT:
+    case SPB_BAD_UTF8_STRING:
+    case SPB_NULL_PARAMETER:
+    case SPB_TOPICNAME_TRUNCATED:
+    case SPB_BAD_STRUCTURE:
+    case SPB_BAD_QOS:
+    case SPB_NO_MORE_MSGIDS:
+    case SPB_OPERATION_INCOMPLETE:
+    case SPB_MAX_BUFFERED_MESSAGES:
+    case SPB_SSL_NOT_SUPPORTED:
+    case SPB_BAD_PROTOCOL:
+    case SPB_BAD_MQTT_OPTION:
+    case SPB_WRONG_MQTT_VERSION:
+    case SPB_0_LEN_WILL_TOPIC:
+    case SPB_COMMAND_IGNORED:
+    case SPB_MAX_BUFFERED:
+        return MQTTAsync_strerror((int)code);
+    }
+
+    /* Reached only for an integer cast to spb_error_t that matches no known
+     * code. Never forwarded to Paho. */
+    return "unknown error code";
 }
 
 static void connectionlost_wrapper_cb(void* context, char* cause)

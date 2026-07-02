@@ -50,12 +50,27 @@ wrapper. The findings below come from auditing `src/spb.c`, `src/spb.h`,
 
 ### 1b. API & design
 
-- [ ] **[High]** Propagate underlying Paho error codes instead of collapsing
+- [x] **[High]** Propagate underlying Paho error codes instead of collapsing
       every failure to `-1`. Define an `spb` error enum and return meaningful
-      codes from the public API.
-- [ ] **[Medium]** Fix the `spb_connect` signature drift: declared without
+      codes from the public API. Added `spb_error_t` (`src/spb.h`): the `-1..-19`
+      range mirrors Paho's `MQTTASYNC_*` codes one-to-one (propagated verbatim,
+      pinned with `_Static_assert` in `src/spb.c`), plus spb-layer codes
+      `SPB_ERR_INVALID_ARGUMENT` (`-100`) and `SPB_ERR_NOMEM` (`-101`). All six
+      public functions now return `spb_error_t`; `spb_sendmessage`/`spb_subscribe`
+      gained a nullable `int* out_token` surfacing the delivery token Paho
+      previously discarded. Added `spb_strerror` for human-readable strings.
+- [ ] **[Low]** `spb_sendmessage`/`spb_subscribe` write Paho's
+      `MQTTAsync_token` (a `typedef int`) into a plain `int* out_token`
+      (`src/spb.c`, `src/spb.h`). Correct today but re-leaks a Paho type
+      detail through an `int`, undermining the "no Paho leakage" goal of the
+      `spb_error_t` work above. Consider a `typedef` (e.g. `spb_token_t`) in
+      `spb.h` so the dependency on Paho's concrete type is explicit and
+      isolated rather than implicit.
+- [x] **[Medium]** Fix the `spb_connect` signature drift: declared without
       `const` (`src/spb.c` ... `src/spb.h:68`) but defined with `const`
-      (`src/spb.c:101`). Make declaration and definition consistent.
+      (`src/spb.c:101`). Make declaration and definition consistent. Resolved
+      by dropping the meaningless top-level `const` on the by-value
+      `connect_options` parameter in the definition to match the declaration.
 - [ ] **[Medium]** Replace the per-callback `printf` debug logging with a gated
       logging macro / configurable log level; also fix the missing newline in
       `connectionlost_wrapper_cb` (`src/spb.c:197`).

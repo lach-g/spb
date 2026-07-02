@@ -48,8 +48,8 @@ void onSendFailure(void* context, spb_failuredata_t* response)
 	};
 
 	int rc;
-	if ((rc = spb_disconnect(client, disconnect_options)) != 0) {
-		printf("Failed to start disconnect, return code %d\n", rc);
+	if ((rc = spb_disconnect(client, disconnect_options)) != SPB_SUCCESS) {
+		printf("Failed to start disconnect, return code %d (%s)\n", rc, spb_strerror(rc));
 		exit(EXIT_FAILURE);
 	}
 }
@@ -66,8 +66,8 @@ void onSend(void* context, spb_successdata_t* response)
 	};
 
 	int rc;
-	if ((rc = spb_disconnect(client, disconnect_options)) != 0) {
-		printf("Failed to start disconnect, return code %d\n", rc);
+	if ((rc = spb_disconnect(client, disconnect_options)) != SPB_SUCCESS) {
+		printf("Failed to start disconnect, return code %d (%s)\n", rc, spb_strerror(rc));
 		exit(EXIT_FAILURE);
 	}
 }
@@ -98,8 +98,8 @@ void onConnect(void* context, spb_successdata_t* response)
 	};
 
 	int rc;
-	if ((rc = spb_sendmessage(client, TOPIC, &message, response_options)) != 0) {
-		printf("Failed to start sendMessage, return code %d\n", rc);
+	if ((rc = spb_sendmessage(client, TOPIC, &message, response_options, NULL)) != SPB_SUCCESS) {
+		printf("Failed to start sendMessage, return code %d (%s)\n", rc, spb_strerror(rc));
 		exit(EXIT_FAILURE);
 	}
 }
@@ -121,8 +121,8 @@ void connlost(void *context, char *cause)
 	printf("Reconnecting\n");
 
 	int rc;
-	if ((rc = spb_connect(client, connect_options)) != 0) {
-		printf("Failed to start connect, return code %d\n", rc);
+	if ((rc = spb_connect(client, connect_options)) != SPB_SUCCESS) {
+		printf("Failed to start connect, return code %d (%s)\n", rc, spb_strerror(rc));
 		finished = 1;
 	}
 }
@@ -151,13 +151,13 @@ int main(int argc, char* argv[]) {
 	const char* uri = ADDRESS;
 	printf("Using server at %s\n", uri);
 
-	if ((rc = spb_create(client, uri, CLIENTID)) != 0) {
-		printf("Failed to create client object, return code %d\n", rc);
+	if ((rc = spb_create(client, uri, CLIENTID)) != SPB_SUCCESS) {
+		printf("Failed to create client object, return code %d (%s)\n", rc, spb_strerror(rc));
 		exit(EXIT_FAILURE);
 	}
 
-	if ((rc = spb_setcallbacks(client, client, connlost, messageArrived, deliveryComplete)) != 0) {
-		printf("Failed to set callback, return code %d\n", rc);
+	if ((rc = spb_setcallbacks(client, client, connlost, messageArrived, deliveryComplete)) != SPB_SUCCESS) {
+		printf("Failed to set callback, return code %d (%s)\n", rc, spb_strerror(rc));
 		exit(EXIT_FAILURE);
 	}
 
@@ -169,8 +169,8 @@ int main(int argc, char* argv[]) {
 		.context = client
 	};
 
-	if ((rc = spb_connect(client, connect_options)) != 0) {
-		printf("Failed to start connect, return code %d\n", rc);
+	if ((rc = spb_connect(client, connect_options)) != SPB_SUCCESS) {
+		printf("Failed to start connect, return code %d (%s)\n", rc, spb_strerror(rc));
 		exit(EXIT_FAILURE);
 	}
 

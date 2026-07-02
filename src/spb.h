@@ -9,6 +9,44 @@ extern "C" {
 
 typedef struct spb_client spb_client_t;
 
+/* Return codes for the public spb_* API.
+ *
+ * The values in the -1..-19 range mirror Eclipse Paho's MQTTASYNC_* codes
+ * one-to-one, so an underlying Paho failure is propagated verbatim while
+ * application code only ever needs to include this header (no Paho leakage).
+ * spb.c pins these to the MQTTASYNC_* values with _Static_assert.
+ *
+ * Codes at -100 and below are raised by the spb layer itself, before or
+ * instead of a Paho call, and occupy a range Paho does not use. */
+typedef enum spb_error {
+    SPB_SUCCESS               = 0,   /* operation started successfully */
+
+    /* Mirror of Paho MQTTASYNC_* (-1..-19), propagated verbatim */
+    SPB_FAILURE               = -1,
+    SPB_PERSISTENCE_ERROR     = -2,
+    SPB_DISCONNECTED          = -3,
+    SPB_MAX_MESSAGES_INFLIGHT = -4,
+    SPB_BAD_UTF8_STRING       = -5,
+    SPB_NULL_PARAMETER        = -6,
+    SPB_TOPICNAME_TRUNCATED   = -7,
+    SPB_BAD_STRUCTURE         = -8,
+    SPB_BAD_QOS               = -9,
+    SPB_NO_MORE_MSGIDS        = -10,
+    SPB_OPERATION_INCOMPLETE  = -11,
+    SPB_MAX_BUFFERED_MESSAGES = -12,
+    SPB_SSL_NOT_SUPPORTED     = -13,
+    SPB_BAD_PROTOCOL          = -14,
+    SPB_BAD_MQTT_OPTION       = -15,
+    SPB_WRONG_MQTT_VERSION    = -16,
+    SPB_0_LEN_WILL_TOPIC      = -17,
+    SPB_COMMAND_IGNORED       = -18,
+    SPB_MAX_BUFFERED          = -19,
+
+    /* spb-layer errors (reserved range, no collision with Paho) */
+    SPB_ERR_INVALID_ARGUMENT  = -100, /* NULL / invalid argument to an spb_* call */
+    SPB_ERR_NOMEM             = -101, /* allocation failure inside the spb layer */
+} spb_error_t;
+
 typedef struct {
     void* payload;
     int payloadlen;
@@ -63,13 +101,16 @@ typedef struct {
 
 
 spb_client_t* spb_init(void);
-int spb_create(spb_client_t* client, const char* uri, const char* client_id);
-int spb_setcallbacks(spb_client_t* client, void* context, spb_connectionlost* connection_lost_cb, spb_messagearrived* messagearrived_cb, spb_deliverycomplete* delivery_complete_cb);
-int spb_connect(spb_client_t* client, spb_connect_options_t connect_options);
-int spb_sendmessage(spb_client_t* client, const char* topic, const spb_message_t* message, spb_response_options_t response_options);
-int spb_subscribe(spb_client_t* client, const char* topic, int qos, spb_response_options_t response);
-int spb_disconnect(spb_client_t* client, spb_disconnect_options_t disconnect_options);
+spb_error_t spb_create(spb_client_t* client, const char* uri, const char* client_id);
+spb_error_t spb_setcallbacks(spb_client_t* client, void* context, spb_connectionlost* connection_lost_cb, spb_messagearrived* messagearrived_cb, spb_deliverycomplete* delivery_complete_cb);
+spb_error_t spb_connect(spb_client_t* client, spb_connect_options_t connect_options);
+spb_error_t spb_sendmessage(spb_client_t* client, const char* topic, const spb_message_t* message, spb_response_options_t response_options, int* out_token);
+spb_error_t spb_subscribe(spb_client_t* client, const char* topic, int qos, spb_response_options_t response, int* out_token);
+spb_error_t spb_disconnect(spb_client_t* client, spb_disconnect_options_t disconnect_options);
 void spb_destroy(spb_client_t* client);
+
+/* Human-readable, static string for an spb_error_t code. Never returns NULL. */
+const char* spb_strerror(spb_error_t code);
 
 
 #ifdef __cplusplus
