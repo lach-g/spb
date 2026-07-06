@@ -71,9 +71,13 @@ wrapper. The findings below come from auditing `src/spb.c`, `src/spb.h`,
       (`src/spb.c:101`). Make declaration and definition consistent. Resolved
       by dropping the meaningless top-level `const` on the by-value
       `connect_options` parameter in the definition to match the declaration.
-- [ ] **[Medium]** Replace the per-callback `printf` debug logging with a gated
+- [x] **[Medium]** Replace the per-callback `printf` debug logging with a gated
       logging macro / configurable log level; also fix the missing newline in
-      `connectionlost_wrapper_cb` (`src/spb.c:197`).
+      `connectionlost_wrapper_cb` (`src/spb.c:197`). Added `SPB_LOG_LEVEL`
+      CMake cache variable (OFF/ERROR/WARN/INFO/TRACE); compile-time gated
+      `SPB_LOG_*` macros backed by a `va_list`/`vfprintf` helper; NULL-context
+      guards in all nine wrapper callbacks now emit `SPB_LOG_WARN` or
+      `SPB_LOG_ERROR` rather than silently skipping dispatch.
 - [ ] **[Medium]** Expose connection options needed later instead of hardcoding
       `MQTTCLIENT_PERSISTENCE_NONE` in `spb_create` (`src/spb.c:55`): MQTT Will,
       TLS/SSL options, MQTT protocol version, and persistence mode. These are

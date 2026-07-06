@@ -1,9 +1,22 @@
 cmake_minimum_required(VERSION 3.15)
 project(spb C)
 
+# === Logging ===
+# Compile-time log verbosity (default: WARN). OFF strips all log calls
+# and their format strings from the binary. Set to ERROR, WARN, INFO, or
+# TRACE to enable logging at and above that level.
+set(SPB_LOG_LEVEL "WARN" CACHE STRING
+    "spb compile-time log verbosity: OFF ERROR WARN INFO TRACE")
+set_property(CACHE SPB_LOG_LEVEL PROPERTY STRINGS "OFF" "ERROR" "WARN" "INFO" "TRACE")
+
 # === Library ===
 add_library(spb_lib src/spb.c)
 target_include_directories(spb_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+if(NOT SPB_LOG_LEVEL STREQUAL "OFF")
+    target_compile_definitions(spb_lib PRIVATE
+        SPB_LOG_LEVEL=SPB_LOG_LEVEL_${SPB_LOG_LEVEL})
+endif()
 
 # Enable warnings depending on compiler
 if (MSVC)

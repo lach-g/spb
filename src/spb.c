@@ -6,6 +6,70 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/* ---------------------------------------------------------------------------
+ * Compile-time gated logging
+ *
+ * Set SPB_LOG_LEVEL to one of the level constants below (via -D or CMake's
+ * SPB_LOG_LEVEL cache variable) to enable logging at and above that level.
+ * The default (undefined / WARN) emits WARN and ERROR calls. Set to OFF to
+ * strip every log call and its format string from the binary at compile
+ * time — no branches, no .rodata entries.
+ *
+ * Usage:
+ *   SPB_LOG_ERROR("connect failed: code %d", rc);
+ *   SPB_LOG_WARN("unexpected NULL context — dispatch skipped");
+ *   SPB_LOG_INFO("client created");
+ *   SPB_LOG_TRACE("message arrived callback");
+ * ------------------------------------------------------------------------- */
+
+#define SPB_LOG_LEVEL_OFF   0
+#define SPB_LOG_LEVEL_ERROR 1
+#define SPB_LOG_LEVEL_WARN  2
+#define SPB_LOG_LEVEL_INFO  3
+#define SPB_LOG_LEVEL_TRACE 4
+
+#ifndef SPB_LOG_LEVEL
+#  define SPB_LOG_LEVEL SPB_LOG_LEVEL_WARN
+#endif
+
+#if SPB_LOG_LEVEL > SPB_LOG_LEVEL_OFF
+#include <stdarg.h>
+static void spb_log_(const char* level, const char* fmt, ...);
+static void spb_log_(const char* level, const char* fmt, ...)
+{
+    va_list ap;
+    fprintf(stderr, "[spb][%s] ", level);
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
+}
+#endif
+
+#if SPB_LOG_LEVEL >= SPB_LOG_LEVEL_ERROR
+#  define SPB_LOG_ERROR(...) spb_log_("ERROR", __VA_ARGS__)
+#else
+#  define SPB_LOG_ERROR(...) ((void)0)
+#endif
+
+#if SPB_LOG_LEVEL >= SPB_LOG_LEVEL_WARN
+#  define SPB_LOG_WARN(...)  spb_log_("WARN",  __VA_ARGS__)
+#else
+#  define SPB_LOG_WARN(...)  ((void)0)
+#endif
+
+#if SPB_LOG_LEVEL >= SPB_LOG_LEVEL_INFO
+#  define SPB_LOG_INFO(...)  spb_log_("INFO",  __VA_ARGS__)
+#else
+#  define SPB_LOG_INFO(...)  ((void)0)
+#endif
+
+#if SPB_LOG_LEVEL >= SPB_LOG_LEVEL_TRACE
+#  define SPB_LOG_TRACE(...) spb_log_("TRACE", __VA_ARGS__)
+#else
+#  define SPB_LOG_TRACE(...) ((void)0)
+#endif
+
 /* Keep the public spb_error_t mirror in lockstep with Paho's codes. If Paho
  * ever renumbers, these fail the build instead of silently mistranslating.
  * A negative-array-size typedef is used rather than C11 _Static_assert because
@@ -304,24 +368,30 @@ const char* spb_strerror(spb_error_t code)
 
 static void connectionlost_wrapper_cb(void* context, char* cause)
 {
-    printf("spb layer: connection lost callback");
+    SPB_LOG_TRACE("connection lost callback");
 
     if (context != NULL) {
         spb_client_t* client = (spb_client_t*)context;
         if (client->client_callbacks.connection_lost_cb != NULL) {
             client->client_callbacks.connection_lost_cb(client->client_callbacks.context, cause);
         }
+    } else {
+        SPB_LOG_WARN("connection lost callback invoked with NULL context — user callback not dispatched");
     }
 }
 
 static int messagearrived_wrapper_cb(void* context, char* topic_name, int topic_len, MQTTAsync_message* message)
 {
-    printf("spb layer: message arrived callback\n");
+    SPB_LOG_TRACE("message arrived callback");
     int rc = 0;
 
-    if (context != NULL &&
-        topic_name != NULL &&
-        message != NULL) {
+    if (context == NULL) {
+        SPB_LOG_WARN("message arrived callback invoked with NULL context — user callback not dispatched");
+    } else if (topic_name == NULL) {
+        SPB_LOG_WARN("message arrived callback invoked with NULL topic_name — user callback not dispatched");
+    } else if (message == NULL) {
+        SPB_LOG_WARN("message arrived callback invoked with NULL message — user callback not dispatched");
+    } else {
         spb_client_t* client = (spb_client_t*)context;
         spb_message_t msg = {
             .payload = message->payload,
@@ -348,18 +418,20 @@ static int messagearrived_wrapper_cb(void* context, char* topic_name, int topic_
 
 static void deliverycomplete_wrapper_cb(void* context, MQTTAsync_token token)
 {
-    printf("spb layer: delivery complete callback\n");
+    SPB_LOG_TRACE("delivery complete callback");
     if (context != NULL) {
         spb_client_t* client = (spb_client_t*)context;
         if (client->client_callbacks.delivery_complete_cb != NULL) {
             client->client_callbacks.delivery_complete_cb(client->client_callbacks.context, token);
         }
+    } else {
+        SPB_LOG_WARN("delivery complete callback invoked with NULL context — user callback not dispatched");
     }
 }
 
 static void connect_onsuccess_wrapper_cb(void* context, MQTTAsync_successData* response)
 {
-    printf("spb layer: connect on success callback\n");
+    SPB_LOG_TRACE("connect on success callback");
     if (context != NULL) {
         spb_client_t* client = (spb_client_t*)context;
         spb_successdata_t success_data = { .token = response ? response->token : 0 };
@@ -367,12 +439,14 @@ static void connect_onsuccess_wrapper_cb(void* context, MQTTAsync_successData* r
         if (client->connect_options.onsuccess_cb != NULL) {
             client->connect_options.onsuccess_cb(client->connect_options.context, &success_data);
         }
+    } else {
+        SPB_LOG_WARN("connect on success callback invoked with NULL context — user callback not dispatched");
     }
 }
 
 static void connect_onfailure_wrapper_cb(void* context,  MQTTAsync_failureData* response)
 {
-    printf("spb layer: connect on failure callback\n");
+    SPB_LOG_TRACE("connect on failure callback");
 
     if (context != NULL) {
         spb_client_t* client = (spb_client_t*)context;
@@ -385,12 +459,14 @@ static void connect_onfailure_wrapper_cb(void* context,  MQTTAsync_failureData* 
         if (client->connect_options.onfailure_cb != NULL) {
             client->connect_options.onfailure_cb(client->connect_options.context, &failure_data);
         }
+    } else {
+        SPB_LOG_WARN("connect on failure callback invoked with NULL context — user callback not dispatched");
     }
 }
 
 static void disconnect_onsuccess_wrapper_cb(void* context, MQTTAsync_successData* response)
 {
-    printf("spb layer: disconnect on success callback\n");
+    SPB_LOG_TRACE("disconnect on success callback");
 
     if (context != NULL) {
         spb_client_t* client = (spb_client_t*)context;
@@ -399,12 +475,14 @@ static void disconnect_onsuccess_wrapper_cb(void* context, MQTTAsync_successData
         if (client->disconnect_options.onsuccess_cb != NULL) {
             client->disconnect_options.onsuccess_cb(client->disconnect_options.context, &success_data);
         }
+    } else {
+        SPB_LOG_WARN("disconnect on success callback invoked with NULL context — user callback not dispatched");
     }
 }
 
 static void disconnect_onfailure_wrapper_cb(void* context,  MQTTAsync_failureData* response)
 {
-    printf("spb layer: disconnect on failure callback\n");
+    SPB_LOG_TRACE("disconnect on failure callback");
 
     if (context != NULL) {
         spb_client_t* client = (spb_client_t*)context;
@@ -417,12 +495,14 @@ static void disconnect_onfailure_wrapper_cb(void* context,  MQTTAsync_failureDat
         if (client->disconnect_options.onfailure_cb != NULL) {
             client->disconnect_options.onfailure_cb(client->disconnect_options.context, &failure_data);
         }
+    } else {
+        SPB_LOG_WARN("disconnect on failure callback invoked with NULL context — user callback not dispatched");
     }
 }
 
 static void response_onsuccess_wrapper_cb(void* context, MQTTAsync_successData* response)
 {
-    printf("spb layer: response on success callback\n");
+    SPB_LOG_TRACE("response on success callback");
 
     if (context != NULL) {
         spb_response_ctx_t* ctx = (spb_response_ctx_t*)context;
@@ -433,12 +513,14 @@ static void response_onsuccess_wrapper_cb(void* context, MQTTAsync_successData* 
         }
 
         free(ctx);
+    } else {
+        SPB_LOG_ERROR("response on success callback invoked with NULL context — spb_response_ctx_t invariant violated, user callback not dispatched");
     }
 }
 
 static void response_onfailure_wrapper_cb(void* context,  MQTTAsync_failureData* response)
 {
-    printf("spb layer: response on failure callback\n");
+    SPB_LOG_TRACE("response on failure callback");
 
     if (context != NULL) {
         spb_response_ctx_t* ctx = (spb_response_ctx_t*)context;
@@ -453,5 +535,7 @@ static void response_onfailure_wrapper_cb(void* context,  MQTTAsync_failureData*
         }
 
         free(ctx);
+    } else {
+        SPB_LOG_ERROR("response on failure callback invoked with NULL context — spb_response_ctx_t invariant violated, user callback not dispatched");
     }
 }
