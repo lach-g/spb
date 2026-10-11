@@ -9,6 +9,23 @@ extern "C" {
 
 typedef struct spb_client spb_client_t;
 
+/* Delivery / subscribe token that identifies a specific in-flight async
+ * request.  The underlying width and signedness match Paho's MQTTAsync_token
+ * exactly; spb.c pins that constraint at compile time with SPB_STATIC_ASSERT
+ * so any future Paho redefinition breaks the build rather than silently
+ * truncating.  Callers should treat the value as opaque: compare for equality
+ * only, do not perform arithmetic on it.
+ *
+ * QoS 1/2 publishes and subscribes get a token in 1..65535 (the MQTT packet
+ * id). Tokens are reused once a request completes, so a token only
+ * identifies a request while it is in flight. */
+typedef int spb_token_t;
+
+/* No token. QoS 0 publishes have no packet id, so spb_sendmessage reports
+ * this for them (and spb_deliverycomplete never fires for QoS 0). Wrapper
+ * callbacks also report it if Paho supplies no response data. */
+#define SPB_TOKEN_NONE ((spb_token_t)0)
+
 /* Return codes for the public spb_* API.
  *
  * The values in the -1..-19 range mirror Eclipse Paho's MQTTASYNC_* codes
@@ -55,11 +72,11 @@ typedef struct {
 } spb_message_t;
 
 typedef struct {
-    int token;
+    spb_token_t token;
 } spb_successdata_t;
 
 typedef struct {
-    int token;
+    spb_token_t token;
     int code;
     const char *message;
 } spb_failuredata_t;
@@ -68,7 +85,7 @@ typedef struct {
 typedef void spb_connectionlost(void* context, char* cause);
     /* Return 1 to indicate message successfully processed, otherwise 0. Allocate and copy any message/topic pointers as on return the ones provided will be freed  */
 typedef int spb_messagearrived(void* context, char* topicName, int topicLen, spb_message_t* message);
-typedef void spb_deliverycomplete(void* context, int token);
+typedef void spb_deliverycomplete(void* context, spb_token_t token);
 typedef void spb_onsuccess(void* context, spb_successdata_t* response);
 typedef void spb_onfailure(void* context,  spb_failuredata_t* response);
 
@@ -104,8 +121,8 @@ spb_client_t* spb_init(void);
 spb_error_t spb_create(spb_client_t* client, const char* uri, const char* client_id);
 spb_error_t spb_setcallbacks(spb_client_t* client, void* context, spb_connectionlost* connection_lost_cb, spb_messagearrived* messagearrived_cb, spb_deliverycomplete* delivery_complete_cb);
 spb_error_t spb_connect(spb_client_t* client, spb_connect_options_t connect_options);
-spb_error_t spb_sendmessage(spb_client_t* client, const char* topic, const spb_message_t* message, spb_response_options_t response_options, int* out_token);
-spb_error_t spb_subscribe(spb_client_t* client, const char* topic, int qos, spb_response_options_t response, int* out_token);
+spb_error_t spb_sendmessage(spb_client_t* client, const char* topic, const spb_message_t* message, spb_response_options_t response_options, spb_token_t* out_token);
+spb_error_t spb_subscribe(spb_client_t* client, const char* topic, int qos, spb_response_options_t response, spb_token_t* out_token);
 spb_error_t spb_disconnect(spb_client_t* client, spb_disconnect_options_t disconnect_options);
 void spb_destroy(spb_client_t* client);
 
