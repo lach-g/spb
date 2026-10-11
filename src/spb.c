@@ -108,6 +108,16 @@ SPB_STATIC_ASSERT(SPB_MAX_BUFFERED          == MQTTASYNC_MAX_BUFFERED);
 SPB_STATIC_ASSERT(sizeof(spb_token_t) == sizeof(MQTTAsync_token));
 SPB_STATIC_ASSERT(((spb_token_t)-1 < 0) == ((MQTTAsync_token)-1 < 0));
 
+/* spb_mqtt_version_t and spb_ssl_version_t are passed to Paho by value. */
+SPB_STATIC_ASSERT(SPB_MQTT_VERSION_DEFAULT == MQTTVERSION_DEFAULT);
+SPB_STATIC_ASSERT(SPB_MQTT_VERSION_3_1     == MQTTVERSION_3_1);
+SPB_STATIC_ASSERT(SPB_MQTT_VERSION_3_1_1   == MQTTVERSION_3_1_1);
+SPB_STATIC_ASSERT(SPB_MQTT_VERSION_5       == MQTTVERSION_5);
+SPB_STATIC_ASSERT(SPB_SSL_VERSION_DEFAULT  == MQTT_SSL_VERSION_DEFAULT);
+SPB_STATIC_ASSERT(SPB_SSL_VERSION_TLS_1_0  == MQTT_SSL_VERSION_TLS_1_0);
+SPB_STATIC_ASSERT(SPB_SSL_VERSION_TLS_1_1  == MQTT_SSL_VERSION_TLS_1_1);
+SPB_STATIC_ASSERT(SPB_SSL_VERSION_TLS_1_2  == MQTT_SSL_VERSION_TLS_1_2);
+
 typedef struct paho_client_cb {
     MQTTAsync_connectionLost* connection_lost_cb;
     MQTTAsync_messageArrived* messagearrived_cb;
@@ -123,6 +133,7 @@ typedef struct paho_lib {
 
 struct spb_client {
     paho_lib_t paho_lib;
+    spb_mqtt_version_t mqtt_version; /* fixed at create; selects v3 vs v5 Paho callbacks */
     spb_client_cb_t client_callbacks;
     spb_connect_options_t connect_options;
     spb_disconnect_options_t disconnect_options;
@@ -153,16 +164,57 @@ spb_client_t* spb_init(void)
 
 spb_error_t spb_create(spb_client_t* client, const char* uri, const char* client_id)
 {
+    return spb_create_with_options(client, uri, client_id, NULL);
+}
+
+spb_error_t spb_create_with_options(spb_client_t* client, const char* uri, const char* client_id, const spb_create_options_t* options)
+{
+    static const spb_create_options_t default_options = { 0 };
+
     if (client == NULL ||
         uri == NULL ||
         client_id == NULL) {
         return SPB_ERR_INVALID_ARGUMENT;
     }
 
-    int rc = MQTTAsync_create(&client->paho_lib.client, uri, client_id, MQTTCLIENT_PERSISTENCE_NONE, NULL);
+    if (options == NULL) {
+        options = &default_options;
+    }
+
+    int persistence_type;
+    void* persistence_context = NULL;
+    switch (options->persistence) {
+    case SPB_PERSISTENCE_NONE:
+        persistence_type = MQTTCLIENT_PERSISTENCE_NONE;
+        break;
+    case SPB_PERSISTENCE_FILE:
+        persistence_type = MQTTCLIENT_PERSISTENCE_DEFAULT;
+        /* Paho copies the directory string; the cast only drops const. */
+        persistence_context = (void*)options->persistence_dir;
+        break;
+    default:
+        return SPB_ERR_INVALID_ARGUMENT;
+    }
+
+    switch (options->mqtt_version) {
+    case SPB_MQTT_VERSION_DEFAULT:
+    case SPB_MQTT_VERSION_3_1:
+    case SPB_MQTT_VERSION_3_1_1:
+    case SPB_MQTT_VERSION_5:
+        break;
+    default:
+        return SPB_ERR_INVALID_ARGUMENT;
+    }
+
+    MQTTAsync_createOptions create_opts = MQTTAsync_createOptions_initializer;
+    create_opts.MQTTVersion = options->mqtt_version;
+
+    int rc = MQTTAsync_createWithOptions(&client->paho_lib.client, uri, client_id, persistence_type, persistence_context, &create_opts);
     if (rc != MQTTASYNC_SUCCESS) {
         return (spb_error_t)rc;
     }
+
+    client->mqtt_version = options->mqtt_version;
 
     return SPB_SUCCESS;
 }
@@ -176,6 +228,21 @@ static void disconnect_onsuccess_wrapper_cb(void* context, MQTTAsync_successData
 static void disconnect_onfailure_wrapper_cb(void* context,  MQTTAsync_failureData* response);
 static void response_onsuccess_wrapper_cb(void* context, MQTTAsync_successData* response);
 static void response_onfailure_wrapper_cb(void* context,  MQTTAsync_failureData* response);
+static void response_onsuccess5_wrapper_cb(void* context, MQTTAsync_successData5* response);
+static void response_onfailure5_wrapper_cb(void* context,  MQTTAsync_failureData5* response);
+
+/* Paho rejects v3 onSuccess/onFailure on publish and subscribe for an MQTT 5
+ * client (MQTTASYNC_BAD_MQTT_OPTION), so pick the callback pair by version. */
+static void set_response_callbacks(const spb_client_t* client, MQTTAsync_responseOptions* opts)
+{
+    if (client->mqtt_version == SPB_MQTT_VERSION_5) {
+        opts->onSuccess5 = response_onsuccess5_wrapper_cb;
+        opts->onFailure5 = response_onfailure5_wrapper_cb;
+    } else {
+        opts->onSuccess = response_onsuccess_wrapper_cb;
+        opts->onFailure = response_onfailure_wrapper_cb;
+    }
+}
 
 spb_error_t spb_setcallbacks(
     spb_client_t* client,
@@ -210,20 +277,74 @@ spb_error_t spb_setcallbacks(
 
 spb_error_t spb_connect(spb_client_t* client, spb_connect_options_t connect_options)
 {
+    static const spb_ssl_options_t default_ssl = { 0 };
+
     if (client == NULL ||
         client->paho_lib.client == NULL) {
         return SPB_ERR_INVALID_ARGUMENT;
     }
 
+    const spb_will_options_t* will = connect_options.will;
+    if (will != NULL &&
+        (will->topic == NULL ||
+         will->payloadlen < 0 ||
+         (will->payload == NULL && will->payloadlen != 0))) {
+        return SPB_ERR_INVALID_ARGUMENT;
+    }
+
     client->connect_options = connect_options;
 
-    client->paho_lib.connect_options.keepAliveInterval = client->connect_options.keep_alive_interval;
-    client->paho_lib.connect_options.cleansession = client->connect_options.clean_session;
-    client->paho_lib.connect_options.onSuccess = connect_onsuccess_wrapper_cb;
-    client->paho_lib.connect_options.onFailure = connect_onfailure_wrapper_cb;
-    client->paho_lib.connect_options.context = client;
+    MQTTAsync_connectOptions* paho_opts = &client->paho_lib.connect_options;
+    paho_opts->keepAliveInterval = connect_options.keep_alive_interval;
+    paho_opts->MQTTVersion = client->mqtt_version;
+    if (client->mqtt_version == SPB_MQTT_VERSION_5) {
+        /* MQTT 5 replaces Clean Session with Clean Start; Paho rejects a
+         * non-zero cleansession for a v5 connect. */
+        paho_opts->cleansession = 0;
+        paho_opts->cleanstart = connect_options.clean_session;
+    } else {
+        paho_opts->cleansession = connect_options.clean_session;
+        paho_opts->cleanstart = 0;
+    }
+    paho_opts->onSuccess = connect_onsuccess_wrapper_cb;
+    paho_opts->onFailure = connect_onfailure_wrapper_cb;
+    paho_opts->context = client;
 
-    int rc = MQTTAsync_connect(client->paho_lib.client, &client->paho_lib.connect_options);
+    /* Paho deep-copies the will and SSL options inside MQTTAsync_connect, so
+     * these locals (and the caller's strings) only need to outlive the call. */
+    MQTTAsync_willOptions paho_will = MQTTAsync_willOptions_initializer;
+    if (will != NULL) {
+        paho_will.topicName = will->topic;
+        paho_will.payload.data = will->payload;
+        paho_will.payload.len = will->payloadlen;
+        paho_will.qos = will->qos;
+        paho_will.retained = will->retained;
+        paho_opts->will = &paho_will;
+    } else {
+        paho_opts->will = NULL;
+    }
+
+    /* Always supplied (Paho ignores it for tcp://) so an ssl:// URI without
+     * explicit options still gets the secure zero-initialised defaults. */
+    const spb_ssl_options_t* ssl = connect_options.ssl != NULL ? connect_options.ssl : &default_ssl;
+    MQTTAsync_SSLOptions paho_ssl = MQTTAsync_SSLOptions_initializer;
+    paho_ssl.trustStore = ssl->trust_store;
+    paho_ssl.CApath = ssl->ca_path;
+    paho_ssl.keyStore = ssl->key_store;
+    paho_ssl.privateKey = ssl->private_key;
+    paho_ssl.privateKeyPassword = ssl->private_key_password;
+    paho_ssl.enabledCipherSuites = ssl->enabled_cipher_suites;
+    paho_ssl.sslVersion = ssl->ssl_version;
+    paho_ssl.enableServerCertAuth = !ssl->disable_server_cert_auth;
+    paho_ssl.verify = !ssl->disable_hostname_verify;
+    paho_opts->ssl = &paho_ssl;
+
+    int rc = MQTTAsync_connect(client->paho_lib.client, paho_opts);
+
+    /* Don't leave the stored options pointing at this stack frame. */
+    paho_opts->will = NULL;
+    paho_opts->ssl = NULL;
+
     if (rc != MQTTASYNC_SUCCESS) {
         return (spb_error_t)rc;
     }
@@ -248,8 +369,7 @@ spb_error_t spb_sendmessage(spb_client_t* client, const char* topic, const spb_m
     ctx->options = response_options;
 
     MQTTAsync_responseOptions paho_resp_opts = MQTTAsync_responseOptions_initializer;
-    paho_resp_opts.onSuccess = response_onsuccess_wrapper_cb;
-    paho_resp_opts.onFailure = response_onfailure_wrapper_cb;
+    set_response_callbacks(client, &paho_resp_opts);
     paho_resp_opts.context = ctx;
 
     MQTTAsync_message paho_msg = MQTTAsync_message_initializer;
@@ -286,8 +406,7 @@ spb_error_t spb_subscribe(spb_client_t* client, const char* topic, int qos, spb_
     ctx->options = response_options;
 
     MQTTAsync_responseOptions paho_resp_opts = MQTTAsync_responseOptions_initializer;
-    paho_resp_opts.onSuccess = response_onsuccess_wrapper_cb;
-    paho_resp_opts.onFailure = response_onfailure_wrapper_cb;
+    set_response_callbacks(client, &paho_resp_opts);
     paho_resp_opts.context = ctx;
 
     int rc = MQTTAsync_subscribe(client->paho_lib.client, topic, qos, &paho_resp_opts);
@@ -508,16 +627,15 @@ static void disconnect_onfailure_wrapper_cb(void* context,  MQTTAsync_failureDat
     }
 }
 
-static void response_onsuccess_wrapper_cb(void* context, MQTTAsync_successData* response)
+/* Shared by the MQTT 3.x and MQTT 5 response wrappers: dispatch to the user
+ * callback, then free the per-call context. */
+static void dispatch_response_success(void* context, spb_successdata_t* success_data)
 {
-    SPB_LOG_TRACE("response on success callback");
-
     if (context != NULL) {
         spb_response_ctx_t* ctx = (spb_response_ctx_t*)context;
-        spb_successdata_t success_data = { .token = (response ? (spb_token_t)response->token : SPB_TOKEN_NONE) };
 
         if (ctx->options.onsuccess_cb != NULL) {
-            ctx->options.onsuccess_cb(ctx->options.context, &success_data);
+            ctx->options.onsuccess_cb(ctx->options.context, success_data);
         }
 
         free(ctx);
@@ -526,24 +644,53 @@ static void response_onsuccess_wrapper_cb(void* context, MQTTAsync_successData* 
     }
 }
 
-static void response_onfailure_wrapper_cb(void* context,  MQTTAsync_failureData* response)
+static void dispatch_response_failure(void* context, spb_failuredata_t* failure_data)
 {
-    SPB_LOG_TRACE("response on failure callback");
-
     if (context != NULL) {
         spb_response_ctx_t* ctx = (spb_response_ctx_t*)context;
-        spb_failuredata_t failure_data = {
-            .token = (response ? (spb_token_t)response->token : SPB_TOKEN_NONE),
-            .code = response ? response->code : 0,
-            .message = response ? response->message : NULL,
-        };
 
         if (ctx->options.onfailure_cb != NULL) {
-            ctx->options.onfailure_cb(ctx->options.context, &failure_data);
+            ctx->options.onfailure_cb(ctx->options.context, failure_data);
         }
 
         free(ctx);
     } else {
         SPB_LOG_ERROR("response on failure callback invoked with NULL context — spb_response_ctx_t invariant violated, user callback not dispatched");
     }
+}
+
+static void response_onsuccess_wrapper_cb(void* context, MQTTAsync_successData* response)
+{
+    SPB_LOG_TRACE("response on success callback");
+    spb_successdata_t success_data = { .token = (response ? (spb_token_t)response->token : SPB_TOKEN_NONE) };
+    dispatch_response_success(context, &success_data);
+}
+
+static void response_onfailure_wrapper_cb(void* context,  MQTTAsync_failureData* response)
+{
+    SPB_LOG_TRACE("response on failure callback");
+    spb_failuredata_t failure_data = {
+        .token = (response ? (spb_token_t)response->token : SPB_TOKEN_NONE),
+        .code = response ? response->code : 0,
+        .message = response ? response->message : NULL,
+    };
+    dispatch_response_failure(context, &failure_data);
+}
+
+static void response_onsuccess5_wrapper_cb(void* context, MQTTAsync_successData5* response)
+{
+    SPB_LOG_TRACE("response on success (MQTT 5) callback");
+    spb_successdata_t success_data = { .token = (response ? (spb_token_t)response->token : SPB_TOKEN_NONE) };
+    dispatch_response_success(context, &success_data);
+}
+
+static void response_onfailure5_wrapper_cb(void* context,  MQTTAsync_failureData5* response)
+{
+    SPB_LOG_TRACE("response on failure (MQTT 5) callback");
+    spb_failuredata_t failure_data = {
+        .token = (response ? (spb_token_t)response->token : SPB_TOKEN_NONE),
+        .code = response ? response->code : 0,
+        .message = response ? response->message : NULL,
+    };
+    dispatch_response_failure(context, &failure_data);
 }
