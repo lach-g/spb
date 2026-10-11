@@ -81,7 +81,8 @@ compile time), so no Paho header ever leaks into application code. Use
 | Function | Purpose |
 | --- | --- |
 | `spb_client_t* spb_init(void)` | Allocate a client and initialise Paho option structs. Returns `NULL` on allocation failure. |
-| `spb_error_t spb_create(client, uri, client_id)` | Create the underlying Paho client for the given broker `uri` and `client_id`. |
+| `spb_error_t spb_create(client, uri, client_id)` | Create the underlying Paho client for the given broker `uri` and `client_id` (default MQTT version, in-memory persistence). |
+| `spb_error_t spb_create_with_options(client, uri, client_id, options)` | As `spb_create`, with an `spb_create_options_t` selecting the MQTT protocol version and persistence mode. `options` may be `NULL`. |
 | `spb_error_t spb_setcallbacks(client, context, connection_lost, message_arrived, delivery_complete)` | Register connection-lost, message-arrived, and delivery-complete callbacks. `message_arrived` is required. |
 | `spb_error_t spb_connect(client, connect_options)` | Begin an async connect. Success/failure reported via the options' callbacks. |
 | `spb_error_t spb_sendmessage(client, topic, message, response_options, out_token)` | Publish `message` to `topic`. If `out_token` is non-`NULL`, the delivery token (`spb_token_t`) is written to it on success. |
@@ -93,8 +94,24 @@ compile time), so no Paho header ever leaks into application code. Use
 ### Option and callback types
 
 - `spb_message_t` — `payload`, `payloadlen`, `retained`, `qos`.
-- `spb_connect_options_t` — `keep_alive_interval`, `clean_session`,
-  `onsuccess_cb`, `onfailure_cb`, `context`.
+- `spb_create_options_t` — `mqtt_version` (`spb_mqtt_version_t`:
+  `SPB_MQTT_VERSION_DEFAULT`, `_3_1`, `_3_1_1`, `_5`), `persistence`
+  (`SPB_PERSISTENCE_NONE` in-memory, or `SPB_PERSISTENCE_FILE`), and
+  `persistence_dir` (file persistence only; `NULL` = working directory). The
+  version is fixed per client and used for every connect.
+- `spb_connect_options_t` — `keep_alive_interval`, `clean_session` (sent as
+  Clean Start under MQTT 5), `will`, `ssl`, `onsuccess_cb`, `onfailure_cb`,
+  `context`. `will` and `ssl` are optional pointers.
+- `spb_will_options_t` — `topic`, `payload` (binary-safe), `payloadlen`, `qos`,
+  `retained`. Registered as the MQTT Last Will and Testament.
+- `spb_ssl_options_t` — `trust_store`, `ca_path`, `key_store`, `private_key`,
+  `private_key_password`, `enabled_cipher_suites`, `ssl_version`,
+  `disable_server_cert_auth`, `disable_hostname_verify`. Used for `ssl://` and
+  `wss://` URIs. Zero-initialised it is secure by default: the server
+  certificate and host name are both verified. Passing `ssl = NULL` gets the
+  same defaults.
+- All strings in the create, will, and TLS options are copied, so the caller
+  may free them once the call returns.
 - `spb_response_options_t` / `spb_disconnect_options_t` — `onsuccess_cb`,
   `onfailure_cb`, `context`.
 - `spb_token_t` — identifies an in-flight request. QoS 1/2 publishes and

@@ -80,10 +80,23 @@ wrapper. The findings below come from auditing `src/spb.c`, `src/spb.h`,
       `SPB_LOG_*` macros backed by a `va_list`/`vfprintf` helper; NULL-context
       guards in all nine wrapper callbacks now emit `SPB_LOG_WARN` or
       `SPB_LOG_ERROR` rather than silently skipping dispatch.
-- [ ] **[Medium]** Expose connection options needed later instead of hardcoding
+- [x] **[Medium]** Expose connection options needed later instead of hardcoding
       `MQTTCLIENT_PERSISTENCE_NONE` in `spb_create` (`src/spb.c:55`): MQTT Will,
       TLS/SSL options, MQTT protocol version, and persistence mode. These are
-      prerequisites for the Sparkplug session model in Section 2.
+      prerequisites for the Sparkplug session model in Section 2. Added
+      `spb_create_with_options` (`spb_create_options_t`: MQTT version and
+      in-memory/file persistence) and optional `will` (`spb_will_options_t`,
+      binary payload) and `ssl` (`spb_ssl_options_t`, secure-by-default) pointers
+      on `spb_connect_options_t`. MQTT 5 maps `clean_session` to Clean Start and
+      uses v5 response callbacks for publish/subscribe. Verified manually against
+      Mosquitto 2 (Docker): round-trips on all versions, TLS trust/host-name
+      checks, and will delivery after SIGKILL.
+- [ ] **[Medium]** Expose MQTT username/password on `spb_connect_options_t`
+      (most production Sparkplug brokers require authentication).
+- [ ] **[Low]** Surface MQTT 5 reason codes and properties. The v5 response
+      wrappers currently map only `token`/`code`/`message` into
+      `spb_failuredata_t`, dropping `reasonCode`. Connect/disconnect properties
+      (e.g. Session Expiry) are not exposed either.
 
 ### 1c. Build & tooling
 
