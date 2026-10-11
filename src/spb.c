@@ -442,7 +442,7 @@ static void connect_onsuccess_wrapper_cb(void* context, MQTTAsync_successData* r
     SPB_LOG_TRACE("connect on success callback");
     if (context != NULL) {
         spb_client_t* client = (spb_client_t*)context;
-        spb_successdata_t success_data = { .token = (spb_token_t)(response ? response->token : 0) };
+        spb_successdata_t success_data = { .token = (response ? (spb_token_t)response->token : SPB_TOKEN_NONE) };
 
         if (client->connect_options.onsuccess_cb != NULL) {
             client->connect_options.onsuccess_cb(client->connect_options.context, &success_data);
@@ -459,7 +459,7 @@ static void connect_onfailure_wrapper_cb(void* context,  MQTTAsync_failureData* 
     if (context != NULL) {
         spb_client_t* client = (spb_client_t*)context;
         spb_failuredata_t failure_data = {
-            .token = (spb_token_t)(response ? response->token : 0),
+            .token = (response ? (spb_token_t)response->token : SPB_TOKEN_NONE),
             .code = response ? response->code : 0,
             .message = response ? response->message : NULL,
         };
@@ -478,7 +478,7 @@ static void disconnect_onsuccess_wrapper_cb(void* context, MQTTAsync_successData
 
     if (context != NULL) {
         spb_client_t* client = (spb_client_t*)context;
-        spb_successdata_t success_data = { .token = (spb_token_t)(response ? response->token : 0) };
+        spb_successdata_t success_data = { .token = (response ? (spb_token_t)response->token : SPB_TOKEN_NONE) };
 
         if (client->disconnect_options.onsuccess_cb != NULL) {
             client->disconnect_options.onsuccess_cb(client->disconnect_options.context, &success_data);
@@ -495,7 +495,7 @@ static void disconnect_onfailure_wrapper_cb(void* context,  MQTTAsync_failureDat
     if (context != NULL) {
         spb_client_t* client = (spb_client_t*)context;
         spb_failuredata_t failure_data = {
-            .token = (spb_token_t)(response ? response->token : 0),
+            .token = (response ? (spb_token_t)response->token : SPB_TOKEN_NONE),
             .code = response ? response->code : 0,
             .message = response ? response->message : NULL,
         };
@@ -514,7 +514,7 @@ static void response_onsuccess_wrapper_cb(void* context, MQTTAsync_successData* 
 
     if (context != NULL) {
         spb_response_ctx_t* ctx = (spb_response_ctx_t*)context;
-        spb_successdata_t success_data = { .token = (spb_token_t)(response ? response->token : 0) };
+        spb_successdata_t success_data = { .token = (response ? (spb_token_t)response->token : SPB_TOKEN_NONE) };
 
         if (ctx->options.onsuccess_cb != NULL) {
             ctx->options.onsuccess_cb(ctx->options.context, &success_data);
@@ -533,7 +533,7 @@ static void response_onfailure_wrapper_cb(void* context,  MQTTAsync_failureData*
     if (context != NULL) {
         spb_response_ctx_t* ctx = (spb_response_ctx_t*)context;
         spb_failuredata_t failure_data = {
-            .token = (spb_token_t)(response ? response->token : 0),
+            .token = (response ? (spb_token_t)response->token : SPB_TOKEN_NONE),
             .code = response ? response->code : 0,
             .message = response ? response->message : NULL,
         };

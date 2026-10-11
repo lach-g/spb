@@ -97,6 +97,10 @@ compile time), so no Paho header ever leaks into application code. Use
   `onsuccess_cb`, `onfailure_cb`, `context`.
 - `spb_response_options_t` / `spb_disconnect_options_t` — `onsuccess_cb`,
   `onfailure_cb`, `context`.
+- `spb_token_t` — identifies an in-flight request. QoS 1/2 publishes and
+  subscribes get a token in `1..65535` (the MQTT packet id), reused once the
+  request completes. `SPB_TOKEN_NONE` (`0`) means no token: QoS 0 publishes
+  report it, and `delivery_complete` never fires for them.
 - `spb_successdata_t` — `token` (`spb_token_t`).
 - `spb_failuredata_t` — `token` (`spb_token_t`), `code`, `message`.
 - Callback typedefs: `spb_connectionlost`, `spb_messagearrived` (return `1` if

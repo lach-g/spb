@@ -14,8 +14,17 @@ typedef struct spb_client spb_client_t;
  * exactly; spb.c pins that constraint at compile time with SPB_STATIC_ASSERT
  * so any future Paho redefinition breaks the build rather than silently
  * truncating.  Callers should treat the value as opaque: compare for equality
- * only, do not perform arithmetic on it. */
+ * only, do not perform arithmetic on it.
+ *
+ * QoS 1/2 publishes and subscribes get a token in 1..65535 (the MQTT packet
+ * id). Tokens are reused once a request completes, so a token only
+ * identifies a request while it is in flight. */
 typedef int spb_token_t;
+
+/* No token. QoS 0 publishes have no packet id, so spb_sendmessage reports
+ * this for them (and spb_deliverycomplete never fires for QoS 0). Wrapper
+ * callbacks also report it if Paho supplies no response data. */
+#define SPB_TOKEN_NONE ((spb_token_t)0)
 
 /* Return codes for the public spb_* API.
  *
