@@ -84,8 +84,8 @@ compile time), so no Paho header ever leaks into application code. Use
 | `spb_error_t spb_create(client, uri, client_id)` | Create the underlying Paho client for the given broker `uri` and `client_id`. |
 | `spb_error_t spb_setcallbacks(client, context, connection_lost, message_arrived, delivery_complete)` | Register connection-lost, message-arrived, and delivery-complete callbacks. `message_arrived` is required. |
 | `spb_error_t spb_connect(client, connect_options)` | Begin an async connect. Success/failure reported via the options' callbacks. |
-| `spb_error_t spb_sendmessage(client, topic, message, response_options, out_token)` | Publish `message` to `topic`. If `out_token` is non-`NULL`, the delivery token is written to it on success. |
-| `spb_error_t spb_subscribe(client, topic, qos, response_options, out_token)` | Subscribe to `topic` at `qos`. If `out_token` is non-`NULL`, the delivery token is written to it on success. |
+| `spb_error_t spb_sendmessage(client, topic, message, response_options, out_token)` | Publish `message` to `topic`. If `out_token` is non-`NULL`, the delivery token (`spb_token_t`) is written to it on success. |
+| `spb_error_t spb_subscribe(client, topic, qos, response_options, out_token)` | Subscribe to `topic` at `qos`. If `out_token` is non-`NULL`, the delivery token (`spb_token_t`) is written to it on success. |
 | `spb_error_t spb_disconnect(client, disconnect_options)` | Begin an async disconnect. |
 | `void spb_destroy(client)` | Destroy the Paho client and free the handle. |
 | `const char* spb_strerror(code)` | Return a static, human-readable string for an `spb_error_t` code. Never returns `NULL`. |
@@ -97,8 +97,8 @@ compile time), so no Paho header ever leaks into application code. Use
   `onsuccess_cb`, `onfailure_cb`, `context`.
 - `spb_response_options_t` / `spb_disconnect_options_t` — `onsuccess_cb`,
   `onfailure_cb`, `context`.
-- `spb_successdata_t` — `token`.
-- `spb_failuredata_t` — `token`, `code`, `message`.
+- `spb_successdata_t` — `token` (`spb_token_t`).
+- `spb_failuredata_t` — `token` (`spb_token_t`), `code`, `message`.
 - Callback typedefs: `spb_connectionlost`, `spb_messagearrived` (return `1` if
   the message was successfully processed, else `0`; copy any payload/topic you
   need to retain, as the provided pointers are freed on return),

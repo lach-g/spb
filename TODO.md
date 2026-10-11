@@ -59,13 +59,15 @@ wrapper. The findings below come from auditing `src/spb.c`, `src/spb.h`,
       public functions now return `spb_error_t`; `spb_sendmessage`/`spb_subscribe`
       gained a nullable `int* out_token` surfacing the delivery token Paho
       previously discarded. Added `spb_strerror` for human-readable strings.
-- [ ] **[Low]** `spb_sendmessage`/`spb_subscribe` write Paho's
+- [x] **[Low]** `spb_sendmessage`/`spb_subscribe` write Paho's
       `MQTTAsync_token` (a `typedef int`) into a plain `int* out_token`
       (`src/spb.c`, `src/spb.h`). Correct today but re-leaks a Paho type
       detail through an `int`, undermining the "no Paho leakage" goal of the
       `spb_error_t` work above. Consider a `typedef` (e.g. `spb_token_t`) in
       `spb.h` so the dependency on Paho's concrete type is explicit and
-      isolated rather than implicit.
+      isolated rather than implicit. Resolved by introducing `spb_token_t`
+      (`src/spb.h`) across all public token surfaces; `SPB_STATIC_ASSERT` in
+      `src/spb.c` pins its width and signedness to `MQTTAsync_token`.
 - [x] **[Medium]** Fix the `spb_connect` signature drift: declared without
       `const` (`src/spb.c` ... `src/spb.h:68`) but defined with `const`
       (`src/spb.c:101`). Make declaration and definition consistent. Resolved
